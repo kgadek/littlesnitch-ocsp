@@ -1,13 +1,15 @@
 {
-  "description" : "Firefox.app - allow OCSP queries\n\nBased on https://uptime.netcraft.com/perf/reports/performance/OCSP",
-  "name" : "Firefox-Allowlist",
-  "rules" : [
+  "description": "Firefox.app - allow OCSP queries\n\nBased on https://uptime.netcraft.com/perf/reports/performance/OCSP",
+  "name": "Firefox-Allowlist",
+  "rules":
+  [
     {
-      "action" : "allow",
-      "ports" : "80",
-      "process" : "\/Applications\/Firefox.app\/Contents\/MacOS\/firefox",
-      "protocol" : "tcp",
-      "remote-domains" : [
+      "action": "allow",
+      "ports": "80",
+      "process": "/Applications/Firefox.app/Contents/MacOS/firefox",
+      "protocol": "tcp",
+      "remote-domains":
+      [
         "GEANT.ocsp.sectigo.com",
         "commercial.ocsp.identrust.com",
         "dv.g2.ocsp.pubcert.jprs.jp",
@@ -85,9 +87,11 @@
         "ocsp.quovadisglobal.com",
         "ocsp.r2m01.amazontrust.com",
         "ocsp.r2m02.amazontrust.com",
+        "ocsp.r2m03.amazontrust.com",
         "ocsp.register.com",
         "ocsp.sca1b.amazontrust.com",
         "ocsp.sectigo.com",
+        "ocsp.sectigochina.com",
         "ocsp.securecore-ca.com",
         "ocsp.serverpass.telesec.de",
         "ocsp.sgssl.net",
