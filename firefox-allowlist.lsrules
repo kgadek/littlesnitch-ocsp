@@ -12,6 +12,7 @@
       [
         "GEANT.ocsp.sectigo.com",
         "commercial.ocsp.identrust.com",
+        "cyberfolks2.ocsp-certum.com",
         "dv.g2.ocsp.pubcert.jprs.jp",
         "dv.g3.ocsp.pubcert.jprs.jp",
         "dv.g4.ocsp.pubcert.jprs.jp",
@@ -151,6 +152,7 @@
         "trustprovider-ocsp.digitalcertvalidation.com",
         "twcasslocsp.twca.com.tw",
         "volusion-ocsp.digitalcertvalidation.com",
+        "xinchacha2dv.ocsp-certum.com",
         "zerossl.ocsp.sectigo.com"
       ]
     }
