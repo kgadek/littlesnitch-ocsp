@@ -4,13 +4,11 @@
 
 use std log
 
-let now = date now
+let scriptTime = date now
 
-# Add "log info" statement in the middle of the pipeline,
-# without disrupting that pipeline's flow.
-def "tap info" [msg: string] {
+def tap [genMsg: closure] {
     let input = $in
-    log info $msg
+    ($input | do $genMsg)
     $input
 }
 
@@ -49,8 +47,16 @@ def "cas upsert" [hashpath: string, suffix: string, condition: closure, update: 
     $casFile
 }
 
-def "cas refresh" [hashpath: string, suffix: string, freshness: duration, update: closure] {
-    cas upsert $hashpath $suffix { || ($now - (ls $in | get 0.modified) > $freshness) } $update
+def "cas needs-refresh" [hashpath: string, rootSuffix: string, freshness: duration] {
+  let casRootFile = $hashpath + $rootSuffix
+
+  # No file or refresh condition applies
+  let res = (not ($casRootFile | path exists)) or ($scriptTime - (ls $casRootFile | get 0.modified) > $freshness)
+  $res
+}
+
+def "cas refresh" [hashpath: string, rootSuffix: string, freshness: duration, update: closure] {
+    cas upsert $hashpath $rootSuffix { || ($scriptTime - (ls $in | get 0.modified) > $freshness) } $update
 }
 
 def "cas upsert-group" [hashpath: string, rootSuffix: string, condition: closure, updateRoot: closure, updateGroup: closure] {
@@ -74,7 +80,7 @@ def "cas upsert-group" [hashpath: string, rootSuffix: string, condition: closure
 
 def "cas refresh-group" [hashpath: string, rootSuffix: string, freshness: duration, updateRoot: closure, updateGroup: closure] {
     log debug $"cas refresh-group [hashpath=($hashpath)][rootSuffix=($rootSuffix)][freshness=($freshness)]"
-    cas upsert-group $hashpath $rootSuffix { || ($now - (ls $in | get 0.modified) > $freshness) } $updateRoot $updateGroup
+    cas upsert-group $hashpath $rootSuffix { || ($scriptTime - (ls $in | get 0.modified) > $freshness) } $updateRoot $updateGroup
 }
 
 
@@ -120,6 +126,7 @@ def getNetcraft []: nothing -> list<string> {
       $url_number = $url_number + 50
       $url_suffix = $"?pageoff=($url_number)"
   }
+  log debug "getNetcraft: done"
   $res
 }
 
@@ -130,21 +137,25 @@ def getNetcraft []: nothing -> list<string> {
 # Y888   / 888 Y888   ' 888  888 Y888  888  888   888 C888  888 888    Y888    ,
 #  "88_-~  888  "88_-~  "88_-888  "88_/888  888   888  "88_-888 888     "88___/
 
+let reportStep = 100
 
 def getCloudflare []: nothing -> list<string> {
   log debug "getCloudflare"
+  let datasize = open cloudflare-radar-domains-top-100000-20240108-20240115.csv | length
+
   open cloudflare-radar-domains-top-100000-20240108-20240115.csv
   | enumerate
+  | tap { log info $"Pure data \(len=($in | length))"}
+  | upsert item.casPath {|domainDescription| cas hashpath $domainDescription.item.domain }
+  | tap { log info $"Adding staleness data \(len=($in | length))"}
+  | par-each {|domainDescription| $domainDescription | upsert item.needsRefresh { cas needs-refresh $domainDescription.item.casPath ".key.txt" 4wk } }
+  | tap { log info $"Filtering those that are fresh \(len=($in | length))"}
+  | where $it.item.needsRefresh == true
+  | tap { log info $"Obtaining data \(len=($in | length))"}
   | par-each {|domainDescription|
-      if ($domainDescription.index mod 100) == 0 {
-          log info $"Processing cloudflare entry ($domainDescription.index)"
-      }
-      log debug $"getCloudflare: domainDescription.item=($domainDescription.item)"
-      let casPath = cas hashpath $domainDescription.item.domain
+      log debug $"getCloudflare: [domainDescription.item=($domainDescription.item)][casPath=($domainDescription.item.casPath)]"
 
-      log debug $"getCloudflare: [domainDescription.item=($domainDescription.item)][casPath=($casPath)]"
-
-      cas refresh-group $casPath ".key.txt" 4wk { $domainDescription.item.domain } {
+      cas refresh-group $domainDescription.item.casPath ".key.txt" 4wk { $domainDescription.item.domain } {
         log info $"\(cloudflare) Getting ($domainDescription.item.domain)..."
         ""
         | timeout --preserve-status 15s openssl s_client -no-interactive -showcerts -connect $"($domainDescription.item.domain):443"
@@ -158,8 +169,8 @@ def getCloudflare []: nothing -> list<string> {
           }
       }
 
-      if ($"($casPath).cert.0.pem" | path exists) {
-          ls $"($casPath).cert.*.pem"
+      if ($"($domainDescription.item.casPath).cert.0.pem" | path exists) {
+          ls $"($domainDescription.item.casPath).cert.*.pem"
           | each { |certfile|
               openssl x509 -noout -ocsp_uri -in $certfile.name
               | str trim
@@ -190,7 +201,6 @@ def getCloudflare []: nothing -> list<string> {
 let res: list<string> = (
     [ { getNetcraft }, { getCloudflare } ]
   | par-each { |fn| do $fn }
-  | tap info "Flattening and processing"
   | flatten
   | where $it != ""
   | each { str downcase }
